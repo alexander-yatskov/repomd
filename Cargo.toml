@@ -1,0 +1,11 @@
+[package]
+name = "repomd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+walkdir = "2.3"
+content_inspector = "0.2"
+ignore = "0.4"  # Специально для работы с .gitignore
+anyhow = "1.0.102"

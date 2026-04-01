@@ -21,7 +21,8 @@ Build from source using Cargo:
 ```bash
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
 cd repomd
-cargo build --release```
+cargo build --release
+```
 
 Folder ```examples``` contains fully commented source code for learning purposes
 
@@ -48,6 +49,7 @@ Folder ```examples``` contains fully commented source code for learning purposes
 ```bash
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
 cd repomd
-cargo build --release```
+cargo build --release
+```
 
-В директория ```examples``` можно найти полностью комментированный код для обучения 
+В директории ```examples``` можно найти полностью комментированный код для обучения 

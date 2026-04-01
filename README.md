@@ -23,6 +23,8 @@ git clone [https://github.com/yourusername/repomd.git](https://github.com/yourus
 cd repomd
 cargo build --release```
 
+Folder ```examples``` contains fully commented source code for learning purposes
+
 # RU
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
@@ -47,3 +49,5 @@ cargo build --release```
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
 cd repomd
 cargo build --release```
+
+В директория ```examples``` можно найти полностью комментированный код для обучения 

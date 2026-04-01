@@ -21,8 +21,9 @@ Build from source using Cargo:
 ```bash
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
 cd repomd
-cargo build --release
+cargo build --release```
 
+# RU
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -45,4 +46,4 @@ cargo build --release
 ```bash
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
 cd repomd
-cargo build --release
+cargo build --release```

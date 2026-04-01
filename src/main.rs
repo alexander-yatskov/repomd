@@ -11,13 +11,13 @@ use std::path::PathBuf;
     about = "Конвертирует репозиторий в один Markdown файл"
 )]
 struct Args {
-    #[arg(default_value = ".")]
+    #[arg(short, long, default_value = ".")]
     workdirectory: PathBuf,
 
     #[arg(short, long, value_delimiter = ',')]
     exclude: Vec<String>,
 
-    #[arg(long)]
+    #[arg(short, long)]
     ignore_gitignore: bool,
 
     #[arg(short, long)]
@@ -25,6 +25,9 @@ struct Args {
 
     #[arg(short = 'd', long)]
     max_depth: Option<usize>,
+
+    #[arg(short, long, default_value = "Source")]
+    prefix: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -38,10 +41,12 @@ fn main() -> anyhow::Result<()> {
         .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
         .unwrap_or_else(|| "project".into());
 
-    let output_path = args
-        .output
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(format!("Source_{}.md", folder_name)));
+    let mut output_path = args.output.unwrap_or_else(|| PathBuf::from("."));
+
+    if output_path.is_dir() {
+        let file_name = format!("{}_{}.md", args.prefix, folder_name);
+        output_path.push(file_name);
+    }
 
     let mut out_file = File::create(&output_path)?;
 

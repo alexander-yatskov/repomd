@@ -24,7 +24,8 @@ cd repomd
 cargo build --release
 ```
 
-Folder ```examples``` contains fully commented source code for learning purposes
+or grab from Release page
+
 
 # RU
 
@@ -44,7 +45,7 @@ Folder ```examples``` contains fully commented source code for learning purposes
 
 ## Установка
 
-Пока проект находится в разработке, вы можете собрать его из исходников:
+Проект может быть скомпилирован из исходников
 
 ```bash
 git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
@@ -52,4 +53,4 @@ cd repomd
 cargo build --release
 ```
 
-В директории ```examples``` можно найти полностью комментированный код для обучения 
+или можно забрать последний релиз с страницы релизов

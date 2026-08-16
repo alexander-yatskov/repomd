@@ -26,7 +26,14 @@ jobs:
             asset_name: repomd-macos-arm64
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - name: Verify version
+        shell: bash
+        run: test "v$(cargo metadata --no-deps --format-version 1 | sed -n 's/.*\"version\":\"\([^\"]*\)\".*/\1/p')" = "${GITHUB_REF_NAME}"
+
+      - name: Test
+        run: cargo test --all-targets --locked
 
       - name: Build binary
         run: cargo build --release --locked

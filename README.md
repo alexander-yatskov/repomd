@@ -1,56 +1,65 @@
 # repomd
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**repomd** is a high-performance CLI utility that recursively scans your directory and consolidates all text and source code files into a single, structured Markdown file.
+`repomd` creates a local, `.gitignore`-aware Markdown snapshot of a codebase for review before manual upload to NotebookLM, ChatGPT, or Claude.
 
-Specifically designed to create a perfect **Source File** for Google NotebookLM, ChatGPT, or Claude when you need to provide full project context in one go.
+It skips binary files, does not follow symbolic links, and uses safe Markdown fences. It does not upload data.
 
-## Features
+> Review the output before upload. A file that is not ignored can contain a secret.
 
-- **Smart Content Detection:** Uses `content_inspector` to automatically skip binary files, images, and audio.
-- **Git-Aware:** Respects your `.gitignore` rules by default (skips `node_modules`, `target`, logs, etc.).
-- **Safe Traversal:** Does not follow symbolic links (symlinks) to prevent infinite recursion and loops.
-- **NotebookLM Optimized:** Formats output with clear H2 headers and fenced code blocks for superior LLM parsing.
+## Install
 
-## Installation
-
-Build from source using Cargo:
+Download a binary from the [release page](https://github.com/alexander-yatskov/repomd/releases), or build it:
 
 ```bash
-git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
+git clone https://github.com/alexander-yatskov/repomd.git
 cd repomd
 cargo build --release
 ```
 
-or grab from Release page
+## Use
 
-
-# RU
-
-[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**repomd** — это быстрая CLI-утилита, которая рекурсивно сканирует вашу директорию и объединяет все текстовые файлы и исходный код в один структурированный Markdown-файл. 
-
-Идеально подходит для создания **Source File** для Google NotebookLM, ChatGPT или Claude, когда нужно передать контекст всего проекта целиком.
-
-## Особенности
-
-- **Умное определение типов:** Использует `content_inspector`, чтобы автоматически игнорировать бинарные файлы, изображения и аудио.
-- **Уважение к `.gitignore`:** По умолчанию не включает файлы, которые вы скрыли от git (node_modules, target, логи).
-- **Безопасность:** Не переходит по символическим ссылкам (symlinks), предотвращая бесконечные циклы.
-- **NotebookLM Ready:** Форматирует вывод с четкими заголовками и блоками кода для лучшего парсинга нейросетями.
-
-## Установка
-
-Проект может быть скомпилирован из исходников
+Create `Source_my-project.md` in the current directory:
 
 ```bash
-git clone [https://github.com/yourusername/repomd.git](https://github.com/yourusername/repomd.git)
+repomd --workdirectory ./my-project
+```
+
+Select an output path and exclude matching paths:
+
+```bash
+repomd -w ./my-project -o context.md -e target,node_modules
+```
+
+The command stops if it cannot read a path. Use `--best-effort` to continue and print a skipped-path report. Use `--force` to replace an existing output file.
+
+Run `repomd --help` for all options.
+
+## RU
+
+`repomd` создает локальный Markdown-снимок кодовой базы. Он учитывает `.gitignore`. Вы можете проверить файл перед ручной загрузкой в NotebookLM, ChatGPT или Claude.
+
+Программа пропускает бинарные файлы, не переходит по символическим ссылкам и не загружает данные в сеть.
+
+> Проверьте результат перед загрузкой. Файл, который не исключен, может содержать секрет.
+
+### Установка
+
+Загрузите бинарный файл со [страницы релизов](https://github.com/alexander-yatskov/repomd/releases) или соберите проект:
+
+```bash
+git clone https://github.com/alexander-yatskov/repomd.git
 cd repomd
 cargo build --release
 ```
 
-или можно забрать последний релиз с страницы релизов
+### Использование
+
+```bash
+repomd --workdirectory ./my-project
+repomd -w ./my-project -o context.md -e target,node_modules
+```
+
+По умолчанию команда остановится, если файл нельзя прочитать. Флаг `--best-effort` разрешает продолжить работу. Флаг `--force` разрешает заменить существующий результат.

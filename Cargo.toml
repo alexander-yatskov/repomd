@@ -1,6 +1,6 @@
 [package]
 name = "repomd"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "CLI tool to flatten projects into a single Markdown file for LLM context"
 repository = "https://github.com/alexander-yatskov/repomd"
@@ -8,7 +8,6 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
-walkdir = "2.3"
 content_inspector = "0.2"
-ignore = "0.4"  # Специально для работы с .gitignore
+ignore = "0.4"
 anyhow = "1.0.102"

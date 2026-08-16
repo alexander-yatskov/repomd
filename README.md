@@ -27,13 +27,29 @@ Create `Source_my-project.md` in the current directory:
 repomd --workdirectory ./my-project
 ```
 
-Select an output path and exclude matching paths:
+Select an output path and exclude repository-relative glob patterns:
 
 ```bash
-repomd -w ./my-project -o context.md -e target,node_modules
+repomd -w ./my-project -o context.md -e 'target/**,node_modules/**'
 ```
 
 The command stops if it cannot read a path. Use `--best-effort` to continue and print a skipped-path report. Use `--force` to replace an existing output file.
+
+Set optional byte limits for large repositories:
+
+```bash
+repomd -w ./my-project --max-file-size 1000000 --max-total-size 10000000
+```
+
+After success, the command reports included files, source and output bytes, excluded files, binary files, files over the size limit, and read errors.
+
+Estimate tokens and stop on common secret formats:
+
+```bash
+repomd -w ./my-project --estimate-tokens --check-secrets
+```
+
+The token value is a rough estimate of one token per four source bytes. The secret check detects common private-key, AWS, GitHub, and `sk-` key formats. It cannot detect every secret.
 
 Run `repomd --help` for all options.
 
@@ -59,7 +75,9 @@ cargo build --release
 
 ```bash
 repomd --workdirectory ./my-project
-repomd -w ./my-project -o context.md -e target,node_modules
+repomd -w ./my-project -o context.md -e 'target/**,node_modules/**'
+repomd -w ./my-project --max-file-size 1000000 --max-total-size 10000000
+repomd -w ./my-project --estimate-tokens --check-secrets
 ```
 
-По умолчанию команда остановится, если файл нельзя прочитать. Флаг `--best-effort` разрешает продолжить работу. Флаг `--force` разрешает заменить существующий результат.
+Флаг `--exclude` принимает glob-шаблоны относительно корня репозитория. По умолчанию команда остановится, если файл нельзя прочитать. Флаг `--best-effort` разрешает продолжить работу. Флаг `--force` разрешает заменить существующий результат. `--estimate-tokens` показывает приблизительное число токенов. `--check-secrets` ищет распространенные форматы ключей, но не может найти каждый секрет. После успешной работы команда показывает сводку.

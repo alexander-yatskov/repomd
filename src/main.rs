@@ -1,7 +1,7 @@
 use anyhow::{Context, bail};
 use clap::Parser;
 use content_inspector::{ContentType, inspect};
-use ignore::WalkBuilder;
+use ignore::{WalkBuilder, overrides::OverrideBuilder};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf, absolute};
@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf, absolute};
 struct Args {
     #[arg(short, long, default_value = ".")]
     workdirectory: PathBuf,
+    /// Repository-relative glob patterns to exclude
     #[arg(short, long, value_delimiter = ',')]
     exclude: Vec<String>,
     #[arg(short, long)]
@@ -31,11 +32,32 @@ struct Args {
     /// Replace an existing output file
     #[arg(long)]
     force: bool,
+    /// Skip files larger than this number of bytes
+    #[arg(long)]
+    max_file_size: Option<u64>,
+    /// Limit included source content to this number of bytes
+    #[arg(long)]
+    max_total_size: Option<u64>,
+    /// Print a rough token estimate based on four source bytes per token
+    #[arg(long)]
+    estimate_tokens: bool,
+    /// Stop if an included file contains a common secret format
+    #[arg(long)]
+    check_secrets: bool,
 }
 
 fn main() -> anyhow::Result<()> {
     let report = pack(&Args::parse())?;
     println!("Created: {}", report.output.display());
+    println!("Files: {}", report.files);
+    println!("Source bytes: {}", report.source_bytes);
+    println!("Output bytes: {}", report.output_bytes);
+    println!("Excluded: {}", report.excluded);
+    println!("Binary: {}", report.binary);
+    println!("Over size limit: {}", report.over_size_limit);
+    if let Some(tokens) = report.estimated_tokens {
+        println!("Estimated tokens: {tokens}");
+    }
     if !report.skipped.is_empty() {
         eprintln!("Skipped {} path(s):", report.skipped.len());
         for path in report.skipped {
@@ -48,6 +70,13 @@ fn main() -> anyhow::Result<()> {
 struct Report {
     output: PathBuf,
     skipped: Vec<String>,
+    files: u64,
+    source_bytes: u64,
+    output_bytes: u64,
+    excluded: u64,
+    binary: u64,
+    over_size_limit: u64,
+    estimated_tokens: Option<u64>,
 }
 
 fn pack(args: &Args) -> anyhow::Result<Report> {
@@ -75,8 +104,8 @@ fn pack(args: &Args) -> anyhow::Result<Report> {
     }
 
     let (temp_path, mut out_file) = create_temp_file(&output)?;
-    let skipped = match write_snapshot(args, &root, &output, &temp_path, &mut out_file) {
-        Ok(skipped) => skipped,
+    let mut report = match write_snapshot(args, &root, &output, &temp_path, &mut out_file) {
+        Ok(report) => report,
         Err(error) => {
             drop(out_file);
             let _ = fs::remove_file(&temp_path);
@@ -92,8 +121,9 @@ fn pack(args: &Args) -> anyhow::Result<Report> {
     }
     fs::rename(&temp_path, &output)
         .with_context(|| format!("cannot move output to {}", output.display()))?;
-
-    Ok(Report { output, skipped })
+    report.output_bytes = fs::metadata(&output)?.len();
+    report.output = output;
+    Ok(report)
 }
 
 fn create_temp_file(output: &Path) -> anyhow::Result<(PathBuf, File)> {
@@ -116,7 +146,7 @@ fn write_snapshot(
     output: &Path,
     temp_path: &Path,
     out_file: &mut File,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Report> {
     let mut walker = WalkBuilder::new(root);
     walker
         .standard_filters(!args.ignore_gitignore)
@@ -124,12 +154,29 @@ fn write_snapshot(
         .max_depth(args.max_depth)
         .sort_by_file_path(|a, b| a.cmp(b));
 
-    let mut skipped = Vec::new();
+    let mut excludes = OverrideBuilder::new(root);
+    for pattern in &args.exclude {
+        excludes
+            .add(&format!("!{pattern}"))
+            .with_context(|| format!("invalid exclude glob: {pattern}"))?;
+    }
+    let excludes = excludes.build()?;
+    let mut report = Report {
+        output: PathBuf::new(),
+        skipped: Vec::new(),
+        files: 0,
+        source_bytes: 0,
+        output_bytes: 0,
+        excluded: 0,
+        binary: 0,
+        over_size_limit: 0,
+        estimated_tokens: None,
+    };
     for result in walker.build() {
         let entry = match result {
             Ok(entry) => entry,
             Err(error) if args.best_effort => {
-                skipped.push(error.to_string());
+                report.skipped.push(error.to_string());
                 continue;
             }
             Err(error) => return Err(error).context("cannot scan work directory"),
@@ -139,28 +186,52 @@ fn write_snapshot(
             continue;
         }
         let relative = path.strip_prefix(root).unwrap_or(path);
-        if args
-            .exclude
-            .iter()
-            .any(|excluded| relative.to_string_lossy().contains(excluded))
-        {
+        if excludes.matched(path, false).is_ignore() {
+            report.excluded += 1;
+            continue;
+        }
+
+        if args.max_file_size.is_some_and(|limit| {
+            entry
+                .metadata()
+                .is_ok_and(|metadata| metadata.len() > limit)
+        }) {
+            report.over_size_limit += 1;
             continue;
         }
 
         let buffer = match fs::read(path) {
             Ok(buffer) => buffer,
             Err(error) if args.best_effort => {
-                skipped.push(format!("{}: {error}", relative.display()));
+                report
+                    .skipped
+                    .push(format!("{}: {error}", relative.display()));
                 continue;
             }
             Err(error) => {
                 return Err(error).with_context(|| format!("cannot read {}", path.display()));
             }
         };
+        let size = buffer.len() as u64;
+        if args.max_file_size.is_some_and(|limit| size > limit)
+            || args
+                .max_total_size
+                .is_some_and(|limit| report.source_bytes.saturating_add(size) > limit)
+        {
+            report.over_size_limit += 1;
+            continue;
+        }
         if inspect(&buffer[..buffer.len().min(1024)]) == ContentType::BINARY {
+            report.binary += 1;
             continue;
         }
         let content = String::from_utf8_lossy(&buffer);
+        if args.check_secrets && contains_possible_secret(&content) {
+            bail!(
+                "possible secret found in {} (review the file or run without --check-secrets)",
+                relative.display()
+            );
+        }
         let extension = path
             .extension()
             .and_then(|value| value.to_str())
@@ -171,8 +242,37 @@ fn write_snapshot(
         writeln!(out_file, "{content}")?;
         writeln!(out_file, "{fence}\n")?;
         writeln!(out_file, "---\n")?;
+        report.files += 1;
+        report.source_bytes += size;
     }
-    Ok(skipped)
+    if args.estimate_tokens {
+        report.estimated_tokens = Some(report.source_bytes.div_ceil(4));
+    }
+    Ok(report)
+}
+
+fn contains_possible_secret(content: &str) -> bool {
+    const PRIVATE_KEYS: [&str; 4] = [
+        "-----BEGIN PRIVATE KEY-----",
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
+    ];
+    if PRIVATE_KEYS.iter().any(|marker| content.contains(marker)) {
+        return true;
+    }
+
+    content
+        .split(|character: char| {
+            character.is_whitespace() || matches!(character, '\'' | '\"' | '`' | '=' | ':' | ',')
+        })
+        .any(|token| {
+            (token.starts_with("AKIA") && token.len() >= 20)
+                || (token.starts_with("ASIA") && token.len() >= 20)
+                || (token.starts_with("ghp_") && token.len() >= 20)
+                || (token.starts_with("github_pat_") && token.len() >= 30)
+                || (token.starts_with("sk-") && token.len() >= 20)
+        })
 }
 
 fn markdown_fence(content: &str) -> String {
@@ -187,19 +287,23 @@ fn markdown_fence(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
     fn test_directory() -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "repomd-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir(&path).unwrap();
-        path
+        loop {
+            let path = std::env::temp_dir().join(format!(
+                "repomd-{}-{}",
+                std::process::id(),
+                NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+            ));
+            match fs::create_dir(&path) {
+                Ok(()) => return path,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("cannot create test directory: {error}"),
+            }
+        }
     }
 
     fn args(root: &Path, output: &Path) -> Args {
@@ -212,6 +316,10 @@ mod tests {
             prefix: "Source".into(),
             best_effort: false,
             force: false,
+            max_file_size: None,
+            max_total_size: None,
+            estimate_tokens: false,
+            check_secrets: false,
         }
     }
 
@@ -250,6 +358,56 @@ mod tests {
         fs::write(&output, "keep me").unwrap();
         assert!(pack(&args(&root, &output)).is_err());
         assert_eq!(fs::read_to_string(&output).unwrap(), "keep me");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn applies_relative_globs_and_size_limits() {
+        let root = test_directory();
+        fs::create_dir(root.join("target")).unwrap();
+        fs::write(root.join("target/generated.txt"), "generated").unwrap();
+        fs::write(root.join("mytarget.txt"), "keep").unwrap();
+        fs::write(root.join("large.txt"), "too large").unwrap();
+        let output = root.join("snapshot.md");
+        let mut options = args(&root, &output);
+        options.exclude.push("target/**".into());
+        options.max_file_size = Some(8);
+
+        let report = pack(&options).unwrap();
+        let content = fs::read_to_string(&output).unwrap();
+        assert!(content.contains("mytarget.txt"));
+        assert!(!content.contains("generated.txt"));
+        assert!(!content.contains("large.txt"));
+        assert_eq!(report.excluded, 1);
+        assert_eq!(report.over_size_limit, 1);
+
+        fs::remove_file(&output).unwrap();
+        let output = root.join("total.md");
+        let mut options = args(&root, &output);
+        options.exclude.push("target/**".into());
+        options.max_total_size = Some(5);
+        let report = pack(&options).unwrap();
+        assert_eq!(report.files, 1);
+        assert_eq!(report.source_bytes, 4);
+        assert_eq!(report.over_size_limit, 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn estimates_tokens_and_blocks_common_secrets() {
+        assert!(contains_possible_secret("key = AKIA1234567890123456"));
+        assert!(contains_possible_secret(
+            "-----BEGIN PRIVATE KEY-----\ndata"
+        ));
+        assert!(!contains_possible_secret("let key = \"example\";"));
+
+        let root = test_directory();
+        fs::write(root.join("input.txt"), "12345678").unwrap();
+        let output = root.join("snapshot.md");
+        let mut options = args(&root, &output);
+        options.estimate_tokens = true;
+        let report = pack(&options).unwrap();
+        assert_eq!(report.estimated_tokens, Some(2));
         fs::remove_dir_all(root).unwrap();
     }
 }

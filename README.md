@@ -1,25 +1,34 @@
 # repomd
 
-[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**Local code context you can inspect before it leaves your machine.**
 
-`repomd` creates a local, `.gitignore`-aware Markdown snapshot of a codebase for review before manual upload to NotebookLM, ChatGPT, or Claude.
+`repomd` turns the relevant text files in a codebase into one deterministic Markdown snapshot. Review it, then upload it manually to NotebookLM, ChatGPT, Claude, or another AI tool.
 
-It skips binary files, does not follow symbolic links, and uses safe Markdown fences. It does not upload data.
-
-> Review the output before upload. A file that is not ignored can contain a secret.
+- Local: no account, server, or upload.
+- Reviewable: plain Markdown with a clear section for each file.
+- Repository-aware: respects `.gitignore` by default.
+- Predictable: stable file order, glob exclusions, and byte limits.
+- Safer: skips binary files and can check common secret formats.
 
 ## Install
 
-Download a binary from the [release page](https://github.com/alexander-yatskov/repomd/releases), or build it:
+From crates.io:
+
+```bash
+cargo install repomd-cli --locked
+```
+
+The package is named `repomd-cli`. The installed command is `repomd`.
+
+You can also download a binary from [GitHub Releases](https://github.com/alexander-yatskov/repomd/releases) or build from source:
 
 ```bash
 git clone https://github.com/alexander-yatskov/repomd.git
 cd repomd
-cargo build --release
+cargo build --release --locked
 ```
 
-## Use
+## Quick start
 
 Create `Source_my-project.md` in the current directory:
 
@@ -27,57 +36,77 @@ Create `Source_my-project.md` in the current directory:
 repomd --workdirectory ./my-project
 ```
 
-Select an output path and exclude repository-relative glob patterns:
+Create a selected snapshot:
 
 ```bash
-repomd -w ./my-project -o context.md -e 'target/**,node_modules/**'
+repomd \
+  --workdirectory ./my-project \
+  --output context.md \
+  --exclude 'target/**,node_modules/**' \
+  --max-file-size 1000000 \
+  --max-total-size 10000000 \
+  --estimate-tokens \
+  --check-secrets
 ```
 
-The command stops if it cannot read a path. Use `--best-effort` to continue and print a skipped-path report. Use `--force` to replace an existing output file.
+Run `repomd --help` for the complete CLI reference.
 
-Set optional byte limits for large repositories:
+## Safety model
 
-```bash
-repomd -w ./my-project --max-file-size 1000000 --max-total-size 10000000
-```
+The command stops on read errors by default. Use `--best-effort` only when a partial snapshot is acceptable.
 
-After success, the command reports included files, source and output bytes, excluded files, binary files, files over the size limit, and read errors.
+An existing output file is not replaced unless you use `--force`. Output is first written to a temporary file. The output file and temporary file are never included in the snapshot.
 
-Estimate tokens and stop on common secret formats:
+`--check-secrets` detects common private-key, AWS, GitHub, and `sk-` key formats. It is a heuristic check. It cannot prove that a snapshot has no secrets. Always review the result before upload.
 
-```bash
-repomd -w ./my-project --estimate-tokens --check-secrets
-```
+## Limits and summary
 
-The token value is a rough estimate of one token per four source bytes. The secret check detects common private-key, AWS, GitHub, and `sk-` key formats. It cannot detect every secret.
+`--max-file-size` skips a file above the specified byte limit. `--max-total-size` limits the combined source bytes included in the snapshot.
 
-Run `repomd --help` for all options.
+After success, `repomd` reports:
+
+- included files and source bytes;
+- output bytes;
+- excluded and binary files;
+- files skipped by size limits;
+- read errors in best-effort mode;
+- an optional token estimate.
+
+The token estimate uses one token per four source bytes. It is useful for a quick size check, not for billing or exact model limits.
 
 ## RU
 
-`repomd` создает локальный Markdown-снимок кодовой базы. Он учитывает `.gitignore`. Вы можете проверить файл перед ручной загрузкой в NotebookLM, ChatGPT или Claude.
+**Локальный контекст кода, который можно проверить до передачи во внешний AI-инструмент.**
 
-Программа пропускает бинарные файлы, не переходит по символическим ссылкам и не загружает данные в сеть.
-
-> Проверьте результат перед загрузкой. Файл, который не исключен, может содержать секрет.
+`repomd` собирает нужные текстовые файлы кодовой базы в один стабильный Markdown-файл. Программа работает локально, учитывает `.gitignore`, пропускает бинарные файлы и ничего не загружает в сеть.
 
 ### Установка
 
-Загрузите бинарный файл со [страницы релизов](https://github.com/alexander-yatskov/repomd/releases) или соберите проект:
-
 ```bash
-git clone https://github.com/alexander-yatskov/repomd.git
-cd repomd
-cargo build --release
+cargo install repomd-cli --locked
 ```
 
-### Использование
+Пакет на crates.io называется `repomd-cli`. Установленная команда называется `repomd`.
+
+### Быстрый старт
 
 ```bash
 repomd --workdirectory ./my-project
-repomd -w ./my-project -o context.md -e 'target/**,node_modules/**'
-repomd -w ./my-project --max-file-size 1000000 --max-total-size 10000000
-repomd -w ./my-project --estimate-tokens --check-secrets
+
+repomd \
+  --workdirectory ./my-project \
+  --output context.md \
+  --exclude 'target/**,node_modules/**' \
+  --max-file-size 1000000 \
+  --max-total-size 10000000 \
+  --estimate-tokens \
+  --check-secrets
 ```
 
-Флаг `--exclude` принимает glob-шаблоны относительно корня репозитория. По умолчанию команда остановится, если файл нельзя прочитать. Флаг `--best-effort` разрешает продолжить работу. Флаг `--force` разрешает заменить существующий результат. `--estimate-tokens` показывает приблизительное число токенов. `--check-secrets` ищет распространенные форматы ключей, но не может найти каждый секрет. После успешной работы команда показывает сводку.
+По умолчанию команда останавливается при ошибке чтения. `--best-effort` разрешает неполный результат. `--force` разрешает заменить существующий файл.
+
+Проверка `--check-secrets` находит только распространенные форматы ключей. Она не гарантирует отсутствие секретов. Всегда проверяйте итоговый Markdown-файл перед загрузкой.
+
+## License
+
+[MIT](https://github.com/alexander-yatskov/repomd/blob/main/LICENSE)

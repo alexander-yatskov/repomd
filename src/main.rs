@@ -67,6 +67,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Default)]
 struct Report {
     output: PathBuf,
     skipped: Vec<String>,
@@ -161,17 +162,7 @@ fn write_snapshot(
             .with_context(|| format!("invalid exclude glob: {pattern}"))?;
     }
     let excludes = excludes.build()?;
-    let mut report = Report {
-        output: PathBuf::new(),
-        skipped: Vec::new(),
-        files: 0,
-        source_bytes: 0,
-        output_bytes: 0,
-        excluded: 0,
-        binary: 0,
-        over_size_limit: 0,
-        estimated_tokens: None,
-    };
+    let mut report = Report::default();
     for result in walker.build() {
         let entry = match result {
             Ok(entry) => entry,
